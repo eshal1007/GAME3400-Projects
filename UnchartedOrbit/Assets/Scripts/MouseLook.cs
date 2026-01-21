@@ -1,49 +1,52 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-
-//This code is reused from a previous class, Game Programming. 
-public class MouseLook : MonoBehaviour
+// simple mouselook 
+// pitch on the camera
+// yaw on the player body
+public class MouseLookInputSystem : MonoBehaviour
 {
+    public Transform body; // the player the camera is attached to
+    public float sensitivity = 2f; // mouse sensitivity
 
-    public float mouseSens = 100f;
-    Transform playerBody;
-    float pitch;
-    public float pitchMin = -90f;
-    public float pitchMax = 90f;
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    private float _xRotation; // current pitch rotation (up/down)
+    private InputAction _lookAction; // mouse input
+
+    private void Awake()
     {
-        playerBody = transform.parent.transform;
-        Cursor.visible = false;
-        Cursor.lockState = CursorLockMode.Locked;
+        // create a mouse action
+        _lookAction = new InputAction("Look", InputActionType.Value, "<Mouse>/delta");
     }
 
-    // Update is called once per frame
-    void Update()
+    private void OnEnable()
     {
-        //THE ONLY NEW PART ADDED TO THE REUSED SCRIPT: making it so that when the escape key is pressed, the cursor unlocks and becomes visible.
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
+        // enable input and lock the cursor
+        _lookAction.Enable();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
 
-        
-        float moveX = Input.GetAxis("Mouse X") * mouseSens * Time.deltaTime;
-        float moveY = Input.GetAxis("Mouse Y") * mouseSens * Time.deltaTime;
+    private void OnDisable()
+    {
+        // unlock the curse when disabled
+        _lookAction.Disable();
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
 
-        //yaw - player
+    private void Update()
+    {
+        // read raw mouse inputs and scale by sensitivity
+        Vector2 delta = _lookAction.ReadValue<Vector2>() * sensitivity;
 
-        if(playerBody)
-        {
-            playerBody.Rotate(Vector3.up * moveX);
-        }
+        // pitch
+        // rotate the camera up/down and clamp to prevent weird edge flipping cases
+        _xRotation -= delta.y;
+        _xRotation = Mathf.Clamp(_xRotation, -80f, 80f);
+        transform.localRotation = Quaternion.Euler(_xRotation, 0f, 0f);
 
-        //pitch - camera
-
-        pitch -= moveY;
-        pitch = Mathf.Clamp(pitch, pitchMin, pitchMax);
-        transform.localRotation = Quaternion.Euler(pitch, 0, 0);
-
+        // yaw
+        // rotate the body left/right
+        body.Rotate(Vector3.up * delta.x);
     }
 }
