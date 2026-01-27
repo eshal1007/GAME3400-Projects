@@ -56,7 +56,6 @@
           // read 2d inputs and convert to world movement
           Vector2 input = _moveAction.ReadValue<Vector2>();
           Vector3 move = transform.right * input.x + transform.forward * input.y;
-          _controller.Move(move * moveSpeed * Time.deltaTime);
 
           // keep controller grounded by applying small downward force
           if (_controller.isGrounded && _velocity.y < 0f)
@@ -70,8 +69,11 @@
               _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
           }
 
-          // apply gravity and move vertically
+          // apply gravity
           _velocity.y += gravity * Time.deltaTime;
-          _controller.Move(_velocity * Time.deltaTime);
+
+          // move once per frame 
+          Vector3 totalMove = move * moveSpeed + Vector3.up * _velocity.y;
+          _controller.Move(totalMove * Time.deltaTime);
       }
   }
