@@ -140,4 +140,20 @@
               cameraTransform.localPosition = p;
           }
       }
-  }
+    public float pushPower = 2.0f;
+    public bool dontPushDown = true;
+    
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+    Rigidbody rb = hit.collider.attachedRigidbody;
+    if (rb == null) return;
+    if (rb.isKinematic) return;
+    if (dontPushDown && hit.moveDirection.y < -0.3f) return;
+
+    Vector3 pushDir = new Vector3(hit.moveDirection.x, 0f, hit.moveDirection.z);
+
+    if (pushDir.sqrMagnitude < 0.0001f) return;
+    
+     rb.AddForce(pushDir.normalized * pushPower, ForceMode.VelocityChange);
+    }
+}
