@@ -7084,8 +7084,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7613db8961c1f4c27ada6fb60b0ff3e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimpleCharacterController
-  moveSpeed: 5
-  jumpHeight: 1.5
+  activePig: 0
+  strawMoveSpeed: 7.5
+  strawJumpHeight: 2.2
+  stickyMoveSpeed: 5
+  stickyJumpHeight: 1.5
+  brickyMoveSpeed: 3.5
+  brickyCanJump: 0
+  showPigTextBox: 1
+  pigTextBoxOffset: {x: 15, y: 15}
+  pigTextBoxSize: {x: 275, y: 56}
+  pigTextFontSize: 30
   gravity: -9.81
   playerHeight: 2
   playerRadius: 0.35

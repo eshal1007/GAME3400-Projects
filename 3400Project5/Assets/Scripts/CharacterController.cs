@@ -10,8 +10,23 @@
   [RequireComponent(typeof(CharacterController))]
   public class SimpleCharacterController : MonoBehaviour
   {
-      public float moveSpeed = 5f; // horizontal move speed
-      public float jumpHeight = 1.5f; // jump height
+      public enum PigType {Straw, Sticky, Bricky}
+
+      [Header("Pig Switching")]
+      public PigType activePig = PigType.Straw;
+      public float strawMoveSpeed = 7.5f;
+      public float strawJumpHeight = 2.2f;
+      public float stickyMoveSpeed = 5f;
+      public float stickyJumpHeight = 1.5f;
+      public float brickyMoveSpeed = 3.5f;
+      public bool brickyCanJump = false;
+
+      [Header("Pig UI")]
+      public bool showPigTextBox = true;
+      public Vector2 pigTextBoxOffset = new Vector2(15f, 15f);
+      public Vector2 pigTextBoxSize = new Vector2(180f, 28f);
+      public int pigTextFontSize = 14;
+
       public float gravity = -9.81f; // downward acceleration
       
       [Header("Player Scale")]
@@ -25,6 +40,10 @@
       private Vector3 _velocity; // current vertical velocity
       private bool _isCrouching;
       private float _currentHeight;
+      private float _activeMoveSpeed;
+      private float _activeJumpHeight;
+      private bool _activeCanJump;
+      private GUIStyle _pigTextStyle;
 
       private InputAction _moveAction; // WASD/arrow input
       private InputAction _jumpAction; // space input
@@ -61,11 +80,18 @@
 
           _crouchAction = new InputAction("Crouch", InputActionType.Button);
           _crouchAction.AddBinding("<Keyboard>/leftShift");
+
+          // set movement values for current pig
+          ApplyPigStats();
       }
       
       private void OnValidate()
       {
           ApplyPlayerScale(playerHeight);
+          ApplyPigStats();
+
+          // keep inspector font value valid
+          if (pigTextFontSize < 1) pigTextFontSize = 1;
       }
 
       private void OnEnable()
@@ -86,6 +112,29 @@
 
       private void Update()
       {
+          // switch pigs with number keys
+          if (Keyboard.current != null)
+          {
+              // 1 = straw
+              if (Keyboard.current.digit1Key.wasPressedThisFrame)
+              {
+                  activePig = PigType.Straw;
+                  ApplyPigStats();
+              }
+              // 2 = sticky
+              else if (Keyboard.current.digit2Key.wasPressedThisFrame)
+              {
+                  activePig = PigType.Sticky;
+                  ApplyPigStats();
+              }
+              // 3 = bricky
+              else if (Keyboard.current.digit3Key.wasPressedThisFrame)
+              {
+                  activePig = PigType.Bricky;
+                  ApplyPigStats();
+              }
+          }
+
           // read 2d inputs and convert to world movement
           Vector2 input = _moveAction.ReadValue<Vector2>();
           Vector3 move = transform.right * input.x + transform.forward * input.y;
@@ -97,9 +146,9 @@
           }
 
           // only jump if on the ground when space is pressed
-          if (_jumpAction.WasPressedThisFrame() && _controller.isGrounded)
+          if (_activeCanJump && _jumpAction.WasPressedThisFrame() && _controller.isGrounded)
           {
-              _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+              _velocity.y = Mathf.Sqrt(_activeJumpHeight * -2f * gravity);
           }
 
           // hold shift to shrink height
@@ -115,8 +164,51 @@
           _velocity.y += gravity * Time.deltaTime;
 
           // move once per frame 
-          Vector3 totalMove = move * moveSpeed + Vector3.up * _velocity.y;
+          Vector3 totalMove = move * _activeMoveSpeed + Vector3.up * _velocity.y;
           _controller.Move(totalMove * Time.deltaTime);
+      }
+
+      // applies movement values based on active pig
+      private void ApplyPigStats()
+      {
+          if (activePig == PigType.Straw)
+          {
+              _activeMoveSpeed = strawMoveSpeed;
+              _activeJumpHeight = strawJumpHeight;
+              _activeCanJump = true;
+          }
+          else if (activePig == PigType.Sticky)
+          {
+              _activeMoveSpeed = stickyMoveSpeed;
+              _activeJumpHeight = stickyJumpHeight;
+              _activeCanJump = true;
+          }
+          else
+          {
+              _activeMoveSpeed = brickyMoveSpeed;
+              _activeJumpHeight = 0f;
+              _activeCanJump = brickyCanJump;
+          }
+      }
+
+      // simple ui text box to show current pig
+      private void OnGUI()
+      {
+          if (!showPigTextBox) return;
+
+          Rect pigBox = new Rect(pigTextBoxOffset.x, pigTextBoxOffset.y, pigTextBoxSize.x, pigTextBoxSize.y);
+          GUI.Box(pigBox, "");
+
+          // lazy init in case gui skin reloads
+          if (_pigTextStyle == null)
+          {
+              _pigTextStyle = new GUIStyle(GUI.skin.label);
+              _pigTextStyle.alignment = TextAnchor.MiddleLeft;
+          }
+
+          _pigTextStyle.fontSize = pigTextFontSize;
+          Rect textRect = new Rect(pigBox.x + 8f, pigBox.y, pigBox.width - 16f, pigBox.height);
+          GUI.Label(textRect, "Current Pig: " + activePig, _pigTextStyle);
       }
       
       // applies the scale values assigned in the inspector to the player object 
