@@ -62,8 +62,8 @@ public class BreakableGlass : MonoBehaviour
                     var rb = go.GetComponent<Rigidbody>();
                     if (rb == null) rb = go.AddComponent<Rigidbody>();
                     rb.mass = 0.2f;
-                    rb.drag = 0f;
-                    rb.angularDrag = 0.05f;
+                    rb.linearDamping = 0f;
+                    rb.angularDamping = 0.05f;
                     rb.useGravity = true;
                     rb.isKinematic = false;
                     var mc = go.GetComponent<MeshCollider>();
