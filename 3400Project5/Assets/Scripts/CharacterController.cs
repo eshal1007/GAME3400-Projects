@@ -17,9 +17,9 @@
       public float strawMoveSpeed = 7.5f;
       public float strawJumpHeight = 2.2f;
       public float stickyMoveSpeed = 5f;
-      public float stickyJumpHeight = 1.5f;
+      public float stickyJumpHeight = .6f; // can jump but not enough to clear obstcles
       public float brickyMoveSpeed = 3.5f;
-      public bool brickyCanJump = false;
+
 
       [Header("Pig UI")]
       public bool showPigTextBox = true;
@@ -48,6 +48,19 @@
       private InputAction _moveAction; // WASD/arrow input
       private InputAction _jumpAction; // space input
       private InputAction _crouchAction; // shift input
+      private Vector3 _horizontalVelocity;// smoothed horizontal motion per pig
+      private bool _wantsGlide;// used by Straw pig glide
+
+    [Header("Feel Tuning")]    
+        public float strawAcceleration = 25f;
+        public float strawAirControl = 0.9f;
+        public float strawGlideGravityMultiplier = 0.35f; 
+
+        public float stickyAcceleration = 15f;
+        public float stickyAirControl = 0.6f;
+
+        public float brickyAcceleration = 8f;
+        public float brickyTurnSmoothing = 12f; 
       
       // strength of push applied to rigidbodies 
       public float pushPower = 2.0f;
@@ -112,61 +125,72 @@
 
       private void Update()
       {
-          // switch pigs with number keys
-          if (Keyboard.current != null)
-          {
-              // 1 = straw
-              if (Keyboard.current.digit1Key.wasPressedThisFrame)
-              {
-                  activePig = PigType.Straw;
-                  ApplyPigStats();
-              }
-              // 2 = sticky
-              else if (Keyboard.current.digit2Key.wasPressedThisFrame)
-              {
-                  activePig = PigType.Sticky;
-                  ApplyPigStats();
-              }
-              // 3 = bricky
-              else if (Keyboard.current.digit3Key.wasPressedThisFrame)
-              {
-                  activePig = PigType.Bricky;
-                  ApplyPigStats();
-              }
-          }
+        // switch pigs with number keys
+        if (Keyboard.current != null)
+        {
+            // 1 = straw
+            if (Keyboard.current.digit1Key.wasPressedThisFrame)
+            {
+                activePig = PigType.Straw;
+                ApplyPigStats();
+                _horizontalVelocity = Vector3.zero; // reset feel on swap
+            }
+            // 2 = sticky
+            else if (Keyboard.current.digit2Key.wasPressedThisFrame)
+            {
+                activePig = PigType.Sticky;
+                ApplyPigStats();
+                _horizontalVelocity = Vector3.zero;
+            }
+            // 3 = bricky
+            else if (Keyboard.current.digit3Key.wasPressedThisFrame)
+            {
+                activePig = PigType.Bricky;
+                ApplyPigStats();
+             _horizontalVelocity = Vector3.zero;
+            }
+        }
 
-          // read 2d inputs and convert to world movement
-          Vector2 input = _moveAction.ReadValue<Vector2>();
-          Vector3 move = transform.right * input.x + transform.forward * input.y;
+        Vector2 input = _moveAction.ReadValue<Vector2>();
 
-          // keep controller grounded by applying small downward force
-          if (_controller.isGrounded && _velocity.y < 0f)
-          {
-              _velocity.y = -2f;
-          }
+        // keep controller grounded by applying small downward force
+        if (_controller.isGrounded && _velocity.y < 0f)
+        {
+            _velocity.y = -2f;
+        }
 
-          // only jump if on the ground when space is pressed
-          if (_activeCanJump && _jumpAction.WasPressedThisFrame() && _controller.isGrounded)
-          {
-              _velocity.y = Mathf.Sqrt(_activeJumpHeight * -2f * gravity);
-          }
+        // jump only if allowed + grounded
+        if (_activeCanJump && _jumpAction.WasPressedThisFrame() && _controller.isGrounded)
+        {
+            _velocity.y = Mathf.Sqrt(_activeJumpHeight * -2f * gravity);
+        }
 
-          // hold shift to shrink height
-          bool wantsCrouch = _crouchAction.IsPressed();
-          if (wantsCrouch != _isCrouching)
-          {
-              _isCrouching = wantsCrouch;
-              float targetHeight = _isCrouching ? playerHeight * crouchHeightMultiplier : playerHeight;
-              ApplyPlayerScale(targetHeight);
-          }
+        // crouch toggle
+        bool wantsCrouch = _crouchAction.IsPressed();
+        if (wantsCrouch != _isCrouching)
+        {
+            _isCrouching = wantsCrouch;
+            float targetHeight = _isCrouching ? playerHeight * crouchHeightMultiplier : playerHeight;
+            ApplyPlayerScale(targetHeight);
+        }
 
-          // apply gravity
-          _velocity.y += gravity * Time.deltaTime;
+        // pig-specific movement 
+        switch (activePig)
+        {   
+            case PigType.Straw:
+                MoveStraw(input);
+                break;
 
-          // move once per frame 
-          Vector3 totalMove = move * _activeMoveSpeed + Vector3.up * _velocity.y;
-          _controller.Move(totalMove * Time.deltaTime);
+            case PigType.Sticky:
+                MoveSticky(input);
+                break;
+
+            case PigType.Bricky:
+                MoveBricky(input);
+                break;
+        }
       }
+
 
       // applies movement values based on active pig
       private void ApplyPigStats()
@@ -187,10 +211,86 @@
           {
               _activeMoveSpeed = brickyMoveSpeed;
               _activeJumpHeight = 0f;
-              _activeCanJump = brickyCanJump;
+              _activeCanJump = false;
           }
       }
+      
+      private void MoveStraw(Vector2 input)
+      {
+        // Fast + high air control + glide while holding jump and falling
+        Vector3 desiredMove = (transform.right * input.x + transform.forward * input.y);
+        desiredMove = Vector3.ClampMagnitude(desiredMove, 1f);
 
+        bool grounded = _controller.isGrounded;
+
+        float control = grounded ? 1f : strawAirControl;
+        float accel = strawAcceleration;
+
+        Vector3 targetHoriz = desiredMove * _activeMoveSpeed;
+        _horizontalVelocity = Vector3.MoveTowards(_horizontalVelocity, targetHoriz, accel * control * Time.deltaTime);
+
+        // Glide: holding jump while falling reduces gravity
+        _wantsGlide = _jumpAction.IsPressed() && !grounded && _velocity.y < 0f;
+        float g = gravity;
+        if (_wantsGlide) g *= strawGlideGravityMultiplier;
+
+        _velocity.y += g * Time.deltaTime;
+
+        Vector3 totalMove = _horizontalVelocity + Vector3.up * _velocity.y;
+        _controller.Move(totalMove * Time.deltaTime);
+     }
+     
+     private void MoveSticky(Vector2 input)
+     {
+        Vector3 desiredMove = transform.right * input.x + transform.forward * input.y;
+        desiredMove = Vector3.ClampMagnitude(desiredMove, 1f);
+
+        bool grounded = _controller.isGrounded;
+
+        float accel = stickyAcceleration;
+        float control = grounded ? 1f : stickyAirControl;
+        
+        // Smooths the acceleration 
+        Vector3 targetHoriz = desiredMove * _activeMoveSpeed;
+        _horizontalVelocity = Vector3.MoveTowards(
+            _horizontalVelocity,
+            targetHoriz,
+            accel * control * Time.deltaTime
+        );
+        // Apllys the gravity since he cant jump
+        _velocity.y += gravity * Time.deltaTime;
+
+        Vector3 totalMove = _horizontalVelocity + Vector3.up * _velocity.y;
+        _controller.Move(totalMove * Time.deltaTime);
+     }
+     
+     private void MoveBricky(Vector2 input)
+     {
+        Vector3 desiredMove = transform.right * input.x + transform.forward * input.y;
+        desiredMove = Vector3.ClampMagnitude(desiredMove, 1f);
+
+        Vector3 targetHoriz = desiredMove * _activeMoveSpeed;
+
+        // Slow turn smoothing 
+        _horizontalVelocity = Vector3.Lerp(
+        _horizontalVelocity,
+        targetHoriz,
+        brickyTurnSmoothing * Time.deltaTime
+        );
+
+        // Slow acceleration 
+        _horizontalVelocity = Vector3.MoveTowards(
+        _horizontalVelocity,
+        targetHoriz,
+        brickyAcceleration * Time.deltaTime
+        );
+
+        // Apply gravity he cnat jump
+        _velocity.y += gravity * Time.deltaTime;
+
+        Vector3 totalMove = _horizontalVelocity + Vector3.up * _velocity.y;
+        _controller.Move(totalMove * Time.deltaTime);
+     }
       // simple ui text box to show current pig
       private void OnGUI()
       {
